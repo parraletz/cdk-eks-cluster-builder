@@ -1,0 +1,24 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: curl-tester
+  namespace: parra-np-client-notallow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: curl-tester
+  template:
+    metadata:
+      labels:
+        app: curl-tester
+    spec:
+      containers:
+        - args:
+            - sleep 3600
+          command:
+            - /bin/sh
+            - -c
+          image: curlimages/curl:latest
+          name: curl-client

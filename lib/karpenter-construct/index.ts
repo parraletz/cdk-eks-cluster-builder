@@ -4,13 +4,15 @@ import * as ec2 from "aws-cdk-lib/aws-ec2"
 import { KubernetesVersion } from "aws-cdk-lib/aws-eks"
 import { Construct } from "constructs"
 import { ArgoRolloutsAddOn } from "../addons/argorollouts/argoRollouts"
-import { ArgoCDCoreAddOn } from "../addons/argocdcore/argocdcore"
 
 interface EksCloudScoutsProps {
   kubernetesVersion: KubernetesVersion
   gitOpsRepo?: string
+  gitOpsPath?: string
   istioVersion?: string
   istioValues?: any
+  platformTeams?: string[] // Optional list of platform team role ARNs
+  platformTeamArns?: string[] // Additional ARNs for the platform team
 }
 
 export default class KarpernterConstruct {
@@ -19,6 +21,9 @@ export default class KarpernterConstruct {
     const region = process.env.CDK_DEFAULT_REGION!
     const stackID = `${id}`
 
+    const bootstrapRepo: blueprints.ApplicationRepository = {
+      repoUrl: props.gitOpsRepo!,
+    }
     const nodeClassSpec: blueprints.Ec2NodeClassV1Spec = {
       amiFamily: "Bottlerocket",
       amiSelectorTerms: [{ alias: "bottlerocket@latest" }],
@@ -152,41 +157,71 @@ export default class KarpernterConstruct {
         version: "2.39.6",
       }),
 
-      //   new ArgoCDAddOn({
-      //     namespace: "argocd",
-      //     version: "v3.0.6",
-      //     createNamespace: true,
-      //     values: {
-      //       server: {
-      //         extensions: {
-      //           enabled: true,
-      //           extensionList: [
-      //             {
-      //               name: "rollout-extension",
-      //               env: [
-      //                 {
-      //                   name: "EXTENSION_URL",
-      //                   value:
-      //                     "https://github.com/argoproj-labs/rollout-extension/releases/download/v0.3.7/extension.tar",
-      //                 },
-      //               ],
-      //             },
-      //           ],
-      //         },
-      //       },
-      //     },
-      //   }),
-      new ArgoCDCoreAddOn({
+      new blueprints.addons.ArgoCDAddOn({
+        bootstrapRepo: {
+          ...bootstrapRepo,
+          path: "argocd/apps",
+          targetRevision: "main",
+        },
         namespace: "argocd",
         version: "v3.0.6",
+        values: {
+          server: {
+            extensions: {
+              enabled: true,
+              extensionList: [
+                {
+                  name: "rollout-extension",
+                  env: [
+                    {
+                      name: "EXTENSION_URL",
+                      value:
+                        "https://github.com/argoproj-labs/rollout-extension/releases/download/v0.3.7/extension.tar",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
       }),
+      //   new ArgoCDCoreAddOn({
+      //     namespace: "argocd",
+      //     version: "v3.0.6",
+      //   }),
     ]
 
-    EksBlueprint.builder()
+    // Create a builder
+    const blueprintBuilder = EksBlueprint.builder()
       .account(account)
       .clusterProvider(clusterProvider)
       .region(region)
       .addOns(...addons)
-      .build(scope, stackID)
+
+    // Setup platform teams
+    const userRoleArns: string[] = []
+
+    // Add roles from platformTeams if they exist
+    if (props.platformTeams && props.platformTeams.length > 0) {
+      userRoleArns.push(...props.platformTeams)
+    }
+
+    // Add additional ARNs if provided
+    if (props.platformTeamArns && props.platformTeamArns.length > 0) {
+      userRoleArns.push(...props.platformTeamArns)
+    }
+
+    // Only create the team if there's at least one ARN
+    if (userRoleArns.length > 0) {
+      const platformTeam = {
+        name: "platform",
+        userRoleArns: userRoleArns,
+      }
+
+      blueprintBuilder.teams(new blueprints.PlatformTeam(platformTeam))
+    }
+
+    // Build cluster
+    blueprintBuilder.build(scope, stackID)
   }
 }

@@ -1,37 +1,37 @@
-import { ClusterAddOn, ClusterInfo } from "@aws-quickstart/eks-blueprints"
-import { Construct } from "constructs"
-import * as eks from "aws-cdk-lib/aws-eks"
-import * as cdk from "aws-cdk-lib"
+import { ClusterAddOn, ClusterInfo } from "@aws-quickstart/eks-blueprints";
+import { Construct } from "constructs";
+import * as eks from "aws-cdk-lib/aws-eks";
+import * as cdk from "aws-cdk-lib";
 
 export interface ArgoCDAddOnProps {
   /**
    * The Kubernetes namespace where Argo CD will be installed.
    * @default "argocd"
    */
-  namespace?: string
+  namespace?: string;
 
   /**
    * The version of the Argo CD Helm chart to install.
    * @default "5.51.4"
    */
-  version?: string
+  version?: string;
 
   /**
    * Custom values to pass to the Helm chart.
    */
-  values?: { [key: string]: any }
+  values?: { [key: string]: any };
 
   /**
    * Whether to create the namespace if it doesn't exist.
    * @default true
    */
-  createNamespace?: boolean
+  createNamespace?: boolean;
 
   /**
    * Whether to enable automatic cleanup when the CDK stack is destroyed.
    * @default true
    */
-  cleanupEnabled?: boolean
+  cleanupEnabled?: boolean;
 }
 
 /**
@@ -84,20 +84,20 @@ export interface ArgoCDAddOnProps {
  * ```
  */
 export class ArgoCDAddOn implements ClusterAddOn {
-  private readonly cleanupEnabled: boolean
+  private readonly cleanupEnabled: boolean;
 
   constructor(private props: ArgoCDAddOnProps = {}) {
-    this.cleanupEnabled = props.cleanupEnabled ?? true
+    this.cleanupEnabled = props.cleanupEnabled ?? true;
   }
 
   deploy(clusterInfo: ClusterInfo): Promise<Construct> {
-    const cluster = clusterInfo.cluster
-    const namespace = this.props.namespace ?? "argocd"
-    const version = this.props.version ?? "5.51.4" // Current version of the Helm chart
-    const createNamespace = this.props.createNamespace ?? true
+    const cluster = clusterInfo.cluster;
+    const namespace = this.props.namespace ?? "argocd";
+    const version = this.props.version ?? "5.51.4"; // Current version of the Helm chart
+    const createNamespace = this.props.createNamespace ?? true;
 
-    let chart: eks.HelmChart
-    let mainResource: Construct
+    let chart: eks.HelmChart;
+    let mainResource: Construct;
 
     if (createNamespace) {
       // Create namespace for Argo CD
@@ -107,7 +107,7 @@ export class ArgoCDAddOn implements ClusterAddOn {
         metadata: {
           name: namespace,
         },
-      })
+      });
 
       // Install Argo CD using Helm
       chart = cluster.addHelmChart("argocd", {
@@ -117,10 +117,10 @@ export class ArgoCDAddOn implements ClusterAddOn {
         namespace: namespace,
         version: version,
         values: this.props.values,
-      })
+      });
 
-      chart.node.addDependency(nsManifest)
-      mainResource = chart
+      chart.node.addDependency(nsManifest);
+      mainResource = chart;
     } else {
       // Install Argo CD using Helm without creating namespace
       chart = cluster.addHelmChart("argocd", {
@@ -130,22 +130,22 @@ export class ArgoCDAddOn implements ClusterAddOn {
         namespace: namespace,
         version: version,
         values: this.props.values,
-      })
-      mainResource = chart
+      });
+      mainResource = chart;
     }
 
     // Add cleanup mechanism if enabled
     if (this.cleanupEnabled) {
-      mainResource = this.setupCleanupMechanism(cluster, namespace, chart)
+      mainResource = this.setupCleanupMechanism(cluster, namespace, chart);
     }
 
-    return Promise.resolve(mainResource)
+    return Promise.resolve(mainResource);
   }
 
   private setupCleanupMechanism(
     cluster: eks.ICluster,
     namespace: string,
-    chart: eks.HelmChart
+    chart: eks.HelmChart,
   ): Construct {
     // Create a custom resource that will be executed during deletion
     const cleanupCR = new cdk.CustomResource(cluster, "argocd-cleanup-cr", {
@@ -159,16 +159,16 @@ export class ArgoCDAddOn implements ClusterAddOn {
         region: cdk.Stack.of(cluster).region,
       },
       resourceType: "Custom::ArgoCDCleanup",
-    })
+    });
 
     // Ensure cleanup runs after the chart has been created
-    cleanupCR.node.addDependency(chart)
+    cleanupCR.node.addDependency(chart);
 
-    return cleanupCR
+    return cleanupCR;
   }
 
   private createCleanupProvider(
-    cluster: eks.ICluster
+    cluster: eks.ICluster,
   ): cdk.custom_resources.Provider {
     // Create a Lambda function that will execute the helm uninstall command
     const fn = new cdk.aws_lambda.Function(cluster, "argocd-cleanup-lambda", {
@@ -236,15 +236,15 @@ def handler(event, context):
         cfnresponse.send(event, context, cfnresponse.FAILED, {"Error": str(e)})
 `),
       timeout: cdk.Duration.minutes(15),
-    })
+    });
 
     // Add necessary permissions for the Lambda function
     fn.addToRolePolicy(
       new cdk.aws_iam.PolicyStatement({
         actions: ["eks:DescribeCluster", "eks:ListClusters"],
         resources: ["*"],
-      })
-    )
+      }),
+    );
 
     // Create a custom provider for the resource
     return new cdk.custom_resources.Provider(
@@ -252,7 +252,7 @@ def handler(event, context):
       "argocd-cleanup-provider",
       {
         onEventHandler: fn,
-      }
-    )
+      },
+    );
   }
 }

@@ -1,30 +1,30 @@
-import { utils } from "@aws-quickstart/eks-blueprints"
-import { HelmAddOn } from "@aws-quickstart/eks-blueprints"
-import * as cdk from "aws-cdk-lib"
+import { utils } from "@aws-quickstart/eks-blueprints";
+import { HelmAddOn } from "@aws-quickstart/eks-blueprints";
+import * as cdk from "aws-cdk-lib";
 
-export const logger = utils.logger
+export const logger = utils.logger;
 
 export function errorHandler(app: cdk.App, message: string, error?: Error) {
-  logger.info(message)
+  logger.info(message);
   if (error) {
-    logger.error(error.name, error.message, error.stack)
+    logger.error(error.name, error.message, error.stack);
   }
-  new EmptyStack(app)
+  new EmptyStack(app);
 }
 
 export function configureApp(logLevel?: number): cdk.App {
-  logger.settings.minLevel = logLevel ?? 2 // debug., 3 info
-  logger.settings.hideLogPositionForProduction = true
+  logger.settings.minLevel = logLevel ?? 2; // debug., 3 info
+  logger.settings.hideLogPositionForProduction = true;
   utils.userLog.info(
-    "=== Run make compile before each run, if any code modification was made. === \n\n"
-  )
+    "=== Run make compile before each run, if any code modification was made. === \n\n",
+  );
 
-  const account = process.env.CDK_DEFAULT_ACCOUNT!
-  const region = process.env.CDK_DEFAULT_REGION!
+  const account = process.env.CDK_DEFAULT_ACCOUNT!;
+  const region = process.env.CDK_DEFAULT_REGION!;
 
-  HelmAddOn.validateHelmVersions = true
+  HelmAddOn.validateHelmVersions = true;
 
-  return new cdk.App({ context: { account, region } })
+  return new cdk.App({ context: { account, region } });
 }
 
 export async function prevalidateSecrets(
@@ -36,21 +36,21 @@ export async function prevalidateSecrets(
     try {
       await utils.validateSecret(
         secret,
-        region ?? process.env.CDK_DEFAULT_REGION!
-      )
+        region ?? process.env.CDK_DEFAULT_REGION!,
+      );
     } catch (error) {
       throw new Error(
-        `${secret} secret must be setup for the ${pattern} pattern to work`
-      )
+        `${secret} secret must be setup for the ${pattern} pattern to work`,
+      );
     }
   }
 }
 
 export class EmptyStack extends cdk.Stack {
   constructor(scope: cdk.App, ...message: string[]) {
-    super(scope, "empty-error-stack")
+    super(scope, "empty-error-stack");
     if (message) {
-      message.forEach((m) => logger.info(m))
+      message.forEach((m) => logger.info(m));
     }
   }
 }

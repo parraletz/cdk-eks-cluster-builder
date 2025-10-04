@@ -1,26 +1,26 @@
-import { ClusterAddOn, ClusterInfo } from "@aws-quickstart/eks-blueprints"
-import { Construct } from "constructs"
-import * as eks from "aws-cdk-lib/aws-eks"
-import * as cdk from "aws-cdk-lib"
+import { ClusterAddOn, ClusterInfo } from "@aws-quickstart/eks-blueprints";
+import { Construct } from "constructs";
+import * as eks from "aws-cdk-lib/aws-eks";
+import * as cdk from "aws-cdk-lib";
 
 export interface ArgoCDCoreAddOnProps {
   /**
    * The Kubernetes namespace where Argo CD will be installed.
    * @default "argocd"
    */
-  namespace?: string
+  namespace?: string;
 
   /**
    * The version of Argo CD to install.
    * @default "v3.0.6"
    */
-  version?: string
+  version?: string;
 
   /**
    * Whether to enable automatic cleanup when the CDK stack is destroyed.
    * @default true
    */
-  cleanupEnabled?: boolean
+  cleanupEnabled?: boolean;
 }
 
 /**
@@ -60,16 +60,16 @@ export interface ArgoCDCoreAddOnProps {
  * ```
  */
 export class ArgoCDCoreAddOn implements ClusterAddOn {
-  private readonly cleanupEnabled: boolean
+  private readonly cleanupEnabled: boolean;
 
   constructor(private props: ArgoCDCoreAddOnProps = {}) {
-    this.cleanupEnabled = props.cleanupEnabled ?? true
+    this.cleanupEnabled = props.cleanupEnabled ?? true;
   }
 
   deploy(clusterInfo: ClusterInfo): Promise<Construct> {
-    const cluster = clusterInfo.cluster
-    const namespace = this.props.namespace ?? "argocd"
-    const version = this.props.version ?? "v3.0.6"
+    const cluster = clusterInfo.cluster;
+    const namespace = this.props.namespace ?? "argocd";
+    const version = this.props.version ?? "v3.0.6";
 
     // Create namespace for Argo CD
     const nsManifest = cluster.addManifest("argocd-namespace", {
@@ -78,9 +78,9 @@ export class ArgoCDCoreAddOn implements ClusterAddOn {
       metadata: {
         name: namespace,
       },
-    })
+    });
 
-    const manifestUrl = `https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/${version}/manifests/install.yaml`
+    const manifestUrl = `https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/${version}/manifests/install.yaml`;
 
     // Create service account for the installation job
     const installerSA = cluster.addManifest("argocd-installer-sa", {
@@ -90,7 +90,7 @@ export class ArgoCDCoreAddOn implements ClusterAddOn {
         name: "argocd-installer",
         namespace: namespace,
       },
-    })
+    });
 
     // Create role binding to give permissions to the service account
     const installerRoleBinding = cluster.addManifest("argocd-installer-rb", {
@@ -111,7 +111,7 @@ export class ArgoCDCoreAddOn implements ClusterAddOn {
         name: "cluster-admin",
         apiGroup: "rbac.authorization.k8s.io",
       },
-    })
+    });
 
     // Configure to apply the complete manifest during deployment
     const applyArgoCD = new eks.KubernetesManifest(cluster, "argocd-apply", {
@@ -143,25 +143,25 @@ export class ArgoCDCoreAddOn implements ClusterAddOn {
           },
         },
       ],
-    })
+    });
 
     // Set correct dependencies
-    installerSA.node.addDependency(nsManifest)
-    installerRoleBinding.node.addDependency(installerSA)
-    applyArgoCD.node.addDependency(installerRoleBinding)
+    installerSA.node.addDependency(nsManifest);
+    installerRoleBinding.node.addDependency(installerSA);
+    applyArgoCD.node.addDependency(installerRoleBinding);
 
     // Add cleanup mechanism if enabled
     if (this.cleanupEnabled) {
-      this.setupCleanupMechanism(cluster, namespace, applyArgoCD)
+      this.setupCleanupMechanism(cluster, namespace, applyArgoCD);
     }
 
-    return Promise.resolve(applyArgoCD)
+    return Promise.resolve(applyArgoCD);
   }
 
   private setupCleanupMechanism(
     cluster: eks.ICluster,
     namespace: string,
-    resource: Construct
+    resource: Construct,
   ): Construct {
     // Create a custom resource that will be executed during deletion
     const cleanupCR = new cdk.CustomResource(
@@ -177,17 +177,17 @@ export class ArgoCDCoreAddOn implements ClusterAddOn {
           region: cdk.Stack.of(cluster).region,
         },
         resourceType: "Custom::ArgoCDCoreCleanup",
-      }
-    )
+      },
+    );
 
     // Ensure cleanup runs after the main resource has been created
-    cleanupCR.node.addDependency(resource)
+    cleanupCR.node.addDependency(resource);
 
-    return cleanupCR
+    return cleanupCR;
   }
 
   private createCleanupProvider(
-    cluster: eks.ICluster
+    cluster: eks.ICluster,
   ): cdk.custom_resources.Provider {
     // Create a lambda function to run cleanup task
     const fn = new cdk.aws_lambda.Function(
@@ -264,16 +264,16 @@ def handler(event, context):
         cfnresponse.send(event, context, cfnresponse.FAILED, {"Error": str(e)})
 `),
         timeout: cdk.Duration.minutes(15),
-      }
-    )
+      },
+    );
 
     // Add necessary permissions for the Lambda function
     fn.addToRolePolicy(
       new cdk.aws_iam.PolicyStatement({
         actions: ["eks:DescribeCluster", "eks:ListClusters"],
         resources: ["*"],
-      })
-    )
+      }),
+    );
 
     // Create a custom provider for the resource
     return new cdk.custom_resources.Provider(
@@ -281,7 +281,7 @@ def handler(event, context):
       "argocd-core-cleanup-provider",
       {
         onEventHandler: fn,
-      }
-    )
+      },
+    );
   }
 }

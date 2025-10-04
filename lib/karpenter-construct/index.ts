@@ -1,29 +1,34 @@
-import * as blueprints from "@aws-quickstart/eks-blueprints"
-import { EksBlueprint } from "@aws-quickstart/eks-blueprints"
-import * as ec2 from "aws-cdk-lib/aws-ec2"
-import { KubernetesVersion } from "aws-cdk-lib/aws-eks"
-import { Construct } from "constructs"
-import { ArgoRolloutsAddOn } from "../addons/argorollouts/argoRollouts"
+import * as blueprints from "@aws-quickstart/eks-blueprints";
+import { EksBlueprint } from "@aws-quickstart/eks-blueprints";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
+import { IpFamily, KubernetesVersion } from "aws-cdk-lib/aws-eks";
+import { Construct } from "constructs";
+import { ArgoCDCoreAddOn } from "../addons/argocdcore/argocdcore";
+import { ArgoRolloutsAddOn } from "../addons/argorollouts/argoRollouts";
 
 interface EksCloudScoutsProps {
-  kubernetesVersion: KubernetesVersion
-  gitOpsRepo?: string
-  gitOpsPath?: string
-  istioVersion?: string
-  istioValues?: any
-  platformTeams?: string[] // Optional list of platform team role ARNs
-  platformTeamArns?: string[] // Additional ARNs for the platform team
+  kubernetesVersion: KubernetesVersion;
+  gitOpsRepo?: string;
+  gitOpsPath?: string;
+  istioVersion?: string;
+  istioValues?: any;
+  platformTeams?: string[]; // Optional list of platform team role ARNs
+  platformTeamArns?: string[]; // Additional ARNs for the platform team
+  bootstrapAppsPath?: string; // Path to bootstrap apps in the gitOps repo
+  bootstrapAppName?: string;
 }
 
 export default class KarpernterConstruct {
   constructor(scope: Construct, id: string, props: EksCloudScoutsProps) {
-    const account = process.env.CDK_DEFAULT_ACCOUNT!
-    const region = process.env.CDK_DEFAULT_REGION!
-    const stackID = `${id}`
+    const account = process.env.CDK_DEFAULT_ACCOUNT!;
+    const region = process.env.CDK_DEFAULT_REGION!;
+    const stackID = `${id}`;
+
+    const ipFamily = IpFamily.IP_V4;
 
     const bootstrapRepo: blueprints.ApplicationRepository = {
       repoUrl: props.gitOpsRepo!,
-    }
+    };
     const nodeClassSpec: blueprints.Ec2NodeClassV1Spec = {
       amiFamily: "Bottlerocket",
       amiSelectorTerms: [{ alias: "bottlerocket@latest" }],
@@ -33,7 +38,7 @@ export default class KarpernterConstruct {
       securityGroupSelectorTerms: [
         { tags: { "aws:eks:cluster-name": `${stackID}` } },
       ],
-    }
+    };
 
     const nodePoolSpec: blueprints.NodePoolV1Spec = {
       labels: { type: "aws-community-day" },
@@ -60,7 +65,7 @@ export default class KarpernterConstruct {
       ],
       expireAfter: "1m",
       disruption: { consolidationPolicy: "WhenEmpty", consolidateAfter: "30s" },
-    }
+    };
 
     const clusterProvider = new blueprints.GenericClusterProvider({
       version: props.kubernetesVersion,
@@ -76,20 +81,20 @@ export default class KarpernterConstruct {
         },
       ],
       fargateProfiles: {
-        karpenter: {
-          fargateProfileName: "karpenter",
-          selectors: [{ namespace: "karpenter" }],
-        },
-        argo: {
-          fargateProfileName: "argocd",
-          selectors: [
-            {
-              namespace: "argo-rollouts",
-            },
-          ],
-        },
+        // karpenter: {
+        //   fargateProfileName: "karpenter",
+        //   selectors: [{ namespace: "karpenter-2" }],
+        // },
+        // argo: {
+        //   fargateProfileName: "argocd",
+        //   selectors: [
+        //     {
+        //       namespace: "argo-rollouts",
+        //     },
+        //   ],
+        // },
       },
-    })
+    });
 
     const addons: Array<blueprints.ClusterAddOn> = [
       new blueprints.addons.AwsLoadBalancerControllerAddOn({
@@ -108,6 +113,9 @@ export default class KarpernterConstruct {
         ec2NodeClassSpec: nodeClassSpec,
         interruptionHandling: true,
         namespace: "karpenter",
+        values: {
+          replicas: 1,
+        },
       }),
       new blueprints.addons.IstioBaseAddOn({
         version: "1.26.1",
@@ -117,18 +125,22 @@ export default class KarpernterConstruct {
       }),
       new blueprints.addons.IstioIngressGatewayAddon({
         version: "1.26.1",
+        namespace: "istio-ingress",
+        createNamespace: true,
         values: {
           service: {
             annotations: {
               "service.beta.kubernetes.io/aws-load-balancer-type": "nlb",
+              "service.beta.kubernetes.io/aws-load-balancer-scheme":
+                "internet-facing",
             },
           },
         },
       }),
-      new blueprints.addons.NginxAddOn({
-        version: "2.1.0",
-        name: "ingress-nginx",
-      }),
+      // new blueprints.addons.NginxAddOn({
+      //   version: "2.1.0",
+      //   name: "ingress-nginx",
+      // }),
       //   new blueprints.addons.SecretsStoreAddOn({
       //     name: "secret-store",
       //     values: {
@@ -157,58 +169,54 @@ export default class KarpernterConstruct {
         version: "2.39.6",
       }),
 
-      new blueprints.addons.ArgoCDAddOn({
-        bootstrapRepo: {
-          ...bootstrapRepo,
-          path: "argocd/apps",
-          targetRevision: "main",
-        },
+      // new blueprints.addons.ArgoCDAddOn({
+      //   name: "argocd",
+      //   namespace: "argocd",
+      //   version: "8.0.17",
+      //   values: {
+      //     server: {
+      //       extensions: {
+      //         enabled: true,
+      //         extensionList: [
+      //           {
+      //             name: "rollout-extension",
+      //             env: [
+      //               {
+      //                 name: "EXTENSION_URL",
+      //                 value:
+      //                   "https://github.com/argoproj-labs/rollout-extension/releases/download/v0.3.7/extension.tar",
+      //               },
+      //             ],
+      //           },
+      //         ],
+      //       },
+      //     },
+      //   },
+      // }),
+      new ArgoCDCoreAddOn({
         namespace: "argocd",
         version: "v3.0.6",
-        values: {
-          server: {
-            extensions: {
-              enabled: true,
-              extensionList: [
-                {
-                  name: "rollout-extension",
-                  env: [
-                    {
-                      name: "EXTENSION_URL",
-                      value:
-                        "https://github.com/argoproj-labs/rollout-extension/releases/download/v0.3.7/extension.tar",
-                    },
-                  ],
-                },
-              ],
-            },
-          },
-        },
       }),
-      //   new ArgoCDCoreAddOn({
-      //     namespace: "argocd",
-      //     version: "v3.0.6",
-      //   }),
-    ]
+    ];
 
     // Create a builder
     const blueprintBuilder = EksBlueprint.builder()
       .account(account)
       .clusterProvider(clusterProvider)
       .region(region)
-      .addOns(...addons)
+      .addOns(...addons);
 
     // Setup platform teams
-    const userRoleArns: string[] = []
+    const userRoleArns: string[] = [];
 
     // Add roles from platformTeams if they exist
     if (props.platformTeams && props.platformTeams.length > 0) {
-      userRoleArns.push(...props.platformTeams)
+      userRoleArns.push(...props.platformTeams);
     }
 
     // Add additional ARNs if provided
     if (props.platformTeamArns && props.platformTeamArns.length > 0) {
-      userRoleArns.push(...props.platformTeamArns)
+      userRoleArns.push(...props.platformTeamArns);
     }
 
     // Only create the team if there's at least one ARN
@@ -216,12 +224,28 @@ export default class KarpernterConstruct {
       const platformTeam = {
         name: "platform",
         userRoleArns: userRoleArns,
-      }
+      };
 
-      blueprintBuilder.teams(new blueprints.PlatformTeam(platformTeam))
+      blueprintBuilder.teams(new blueprints.PlatformTeam(platformTeam));
     }
 
     // Build cluster
-    blueprintBuilder.build(scope, stackID)
+    const blueprint = blueprintBuilder.build(scope, stackID);
+
+    // Create the bootstrap application if gitOpsRepo is provided
+    if (props.gitOpsRepo) {
+      // Get the actual EKS cluster from the blueprint
+      const cluster = blueprint.getClusterInfo().cluster;
+
+      // Create the Argo CD bootstrap application with the cluster
+      // new BootstrapApp(scope, `${id}-bootstrap-app`, {
+      //   repoUrl: props.gitOpsRepo,
+      //   path: props.bootstrapAppsPath || "bootstrap",
+      //   bootstrapAppName: props.bootstrapAppName,
+      //   targetRevision: "main",
+      //   namespace: "argocd",
+      //   cluster: cluster,
+      // })
+    }
   }
 }
